@@ -18,6 +18,7 @@
 #include "applog.h"
 #include "result.h"
 #include "prefix.h"
+#include "bip38.h"
 
 #define BITCOINTOOL_OPTION_DEFAULT_BASE58CHECK_CHANGE_CHARS 3
 #define BITCOINTOOL_OPTION_DEFAULT_BASE58CHECK_INSERT_CHARS 3
@@ -38,7 +39,8 @@ struct BitcoinToolOptions {
 		INPUT_TYPE_PUBLIC_KEY,
 		INPUT_TYPE_PRIVATE_KEY_WIF,
 		INPUT_TYPE_PRIVATE_KEY,
-		INPUT_TYPE_MINI_PRIVATE_KEY
+		INPUT_TYPE_MINI_PRIVATE_KEY,
+		INPUT_TYPE_PRIVATE_KEY_BIP38,
 	} input_type;
 
 	enum InputFormat {
@@ -57,7 +59,8 @@ struct BitcoinToolOptions {
 		OUTPUT_TYPE_PUBLIC_KEY_SHA256,
 		OUTPUT_TYPE_PUBLIC_KEY,
 		OUTPUT_TYPE_PRIVATE_KEY_WIF,
-		OUTPUT_TYPE_PRIVATE_KEY
+		OUTPUT_TYPE_PRIVATE_KEY,
+		OUTPUT_TYPE_PRIVATE_KEY_BIP38,
 	} output_type;
 
 	enum OutputFormat {
@@ -111,6 +114,7 @@ struct BitcoinTool {
 	int mini_private_key_set,
 		private_key_set,
 		private_key_wif_set,
+		private_key_bip38_set,
 		public_key_set,
 		public_key_sha256_set,
 		public_key_ripemd160_set,
@@ -293,6 +297,8 @@ static int BitcoinTool_parseOptions(BitcoinTool *self
 				o->input_type = INPUT_TYPE_PRIVATE_KEY;
 			} else if (!strcmp(v, "mini-private-key")) {
 				o->input_type = INPUT_TYPE_MINI_PRIVATE_KEY;
+			} else if (!strcmp(v, "private-key-bip38")) {
+				o->input_type = INPUT_TYPE_PRIVATE_KEY_BIP38;
 			} else {
 				applog(APPLOG_ERROR, __func__,
 					"Unknown value \"%s\" for --input-type, must be one of:", v
@@ -321,6 +327,8 @@ static int BitcoinTool_parseOptions(BitcoinTool *self
 				o->output_type = OUTPUT_TYPE_PRIVATE_KEY_WIF;
 			} else if (!strcmp(v, "private-key")) {
 				o->output_type = OUTPUT_TYPE_PRIVATE_KEY;
+			} else if (!strcmp(v, "private-key-bip38")) {
+				o->output_type = OUTPUT_TYPE_PRIVATE_KEY_BIP38;
 			} else if (!strcmp(v, "all")) {
 				o->output_type = OUTPUT_TYPE_ALL;
 			} else {
@@ -610,6 +618,7 @@ BitcoinResult Bitcoin_ConvertInputToOutput(struct BitcoinTool *self)
 					break;
 			}
 		case INPUT_TYPE_PRIVATE_KEY_WIF :
+		case INPUT_TYPE_PRIVATE_KEY_BIP38 :
 			switch (self->options.output_type) {
 				case OUTPUT_TYPE_ALL :
 				case OUTPUT_TYPE_ADDRESS :
@@ -1097,6 +1106,19 @@ BitcoinResult Bitcoin_CheckInputSize(struct BitcoinTool *self)
 			self->private_key_wif_set = 1;
 			break;
 		}
+		case INPUT_TYPE_PRIVATE_KEY_BIP38: {
+			const size_t max_pw_size = 256;
+			char passwd[max_pw_size];
+			size_t pw_size = passwd_prompt(passwd, max_pw_size, "BIP38 password: ");
+			if (!pw_size)
+				return -1;
+			applog(APPLOG_ERROR, __func__,
+				"BIP38 parsing not implemented, password: %s",
+				passwd
+			);
+			passwd_clear(passwd, pw_size);
+			return BITCOIN_ERROR_PRIVATE_KEY_INVALID_FORMAT;
+		}
 		case INPUT_TYPE_PUBLIC_KEY : {
 			if (input_raw_size != BITCOIN_PUBLIC_KEY_UNCOMPRESSED_SIZE &&
 				input_raw_size != BITCOIN_PUBLIC_KEY_COMPRESSED_SIZE
@@ -1309,6 +1331,9 @@ BitcoinResult Bitcoin_WriteOutput(struct BitcoinTool *self)
 			output_raw_size = BitcoinPrivateKey_GetSize(&self->private_key);
 			assert(sizeof(self->output_raw) >= output_raw_size);
 			memcpy(self->output_raw, self->private_key.data, output_raw_size);
+			break;
+		case OUTPUT_TYPE_PRIVATE_KEY_BIP38 :
+			/* TODO */
 			break;
 		default :
 			applog(APPLOG_ERROR, __func__, "Unknown output type.");
